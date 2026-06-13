@@ -1,18 +1,26 @@
 defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
   @moduledoc """
-  A prism that fetches PnL and trade history from Hyperliquid.
+  A prism that fetches realized + unrealized PnL from Hyperliquid.
 
   ## Example
 
       iex> Lux.Prisms.Hyperliquid.HyperliquidPnlPrism.run(%{
       ...>   address: "0x0403369c02199a0cb827f4d6492927e9fa5668d5"
       ...> })
-      {:ok, %{status: "success", pnl_data: %{}}}
+      {:ok, %{
+        status: "success",
+        pnl_data: %{
+          total_realized_pnl: "125.50",
+          total_unrealized_pnl: "-12.30",
+          positions: [],
+          recent_fills: []
+        }
+      }}
   """
 
   use Lux.Prism,
     name: "Hyperliquid PnL Tracker",
-    description: "Fetches PnL and trade history from Hyperliquid",
+    description: "Fetches realized and unrealized PnL with trade history from Hyperliquid",
     input_schema: %{
       type: :object,
       properties: %{
@@ -33,7 +41,8 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
           properties: %{
             total_realized_pnl: %{type: :string},
             total_unrealized_pnl: %{type: :string},
-            positions: %{type: :array}
+            positions: %{type: :array},
+            recent_fills: %{type: :array}
           }
         }
       },
@@ -46,14 +55,16 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
 
   def handler(%{address: address}, _ctx) do
     with {:ok, private_key} <- get_private_key(),
-         {:ok, api_url} <- {:ok, Config.hyperliquid_api_url()},
+         {:ok, api_url}     <- {:ok, Config.hyperliquid_api_url()},
          {:ok, %{"success" => true}} <- Lux.Python.import_package("hyperliquid.info"),
          {:ok, %{"success" => true}} <- Lux.Python.import_package("hyperliquid_utils.setup"),
          {:ok, result} <- fetch_pnl(private_key, address, api_url) do
       {:ok, %{status: "success", pnl_data: result}}
     else
-      {:error, :missing_private_key} -> {:error, "Hyperliquid account private key is not configured"}
-      {:error, reason} -> {:error, reason}
+      {:error, :missing_private_key} ->
+        {:error, "Hyperliquid private key not configured"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -64,15 +75,19 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
   end
 
   defp fetch_pnl(private_key, address, api_url) do
-    python_result =
-      python variables: %{private_key: private_key, address: address, api_url: api_url} do
+    result =
+      python variables: %{
+        private_key: private_key,
+        address: address,
+        api_url: api_url
+      } do
         ~PY"""
-        from hyperliquid.info import Info
         from hyperliquid_utils.setup import setup
 
         _, info, _ = setup(private_key, address, api_url, skip_ws=True)
-        user_state = info.user_state(address)
 
+        # Unrealized PnL from open positions
+        user_state = info.user_state(address)
         total_unrealized = 0.0
         positions = []
 
@@ -93,17 +108,37 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
             "position_value": p.get("positionValue", "0")
           })
 
+        # Realized PnL from user_fills — Official SDK: info.user_fills(address)
+        fills = info.user_fills(address)
+        total_realized = 0.0
+        recent_fills = []
+
+        for fill in fills[:50]:
+          closed_pnl = float(fill.get("closedPnl", 0))
+          total_realized += closed_pnl
+          recent_fills.append({
+            "coin": fill.get("coin"),
+            "side": fill.get("side"),
+            "price": fill.get("px"),
+            "size": fill.get("sz"),
+            "closed_pnl": str(closed_pnl),
+            "fee": fill.get("fee"),
+            "time": fill.get("time")
+          })
+
         {
-          "total_unrealized_pnl": str(total_unrealized),
-          "total_realized_pnl": "0",
-          "positions": positions
+          "total_unrealized_pnl": str(round(total_unrealized, 6)),
+          "total_realized_pnl":   str(round(total_realized, 6)),
+          "positions":            positions,
+          "recent_fills":         recent_fills
         }
         """
       end
 
-    case python_result do
-      %{"error" => error} -> {:error, error}
-      result when is_map(result) -> {:ok, result}
+    case result do
+      %{"error" => e} -> {:error, e}
+      r when is_map(r) -> {:ok, r}
+      _ -> {:error, "Unexpected response"}
     end
   end
 end
