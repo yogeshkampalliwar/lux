@@ -2,6 +2,8 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
   @moduledoc """
   A prism for managing liquidity pools on PancakeSwap V2.
 
+  Handles ERC20 token approvals automatically before add/remove liquidity.
+
   ## Example
 
       iex> Lux.Prisms.Pancakeswap.PancakeswapPoolPrism.handler(%{
@@ -19,7 +21,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
 
   use Lux.Prism,
     name: "PancakeSwap Pool Management",
-    description: "Manages liquidity pools on PancakeSwap V2",
+    description: "Manages liquidity pools on PancakeSwap V2 with auto token approval",
     input_schema: %{
       type: :object,
       properties: %{
@@ -56,8 +58,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
 
   alias Lux.Config
 
-  # PancakeSwap V2 Router on BSC
-  @router_v2 "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+  @router_v2  "0x10ED43C718714eb63d5aA57B78B54704E256024E"
   @factory_v2 "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
 
   def handler(input, _ctx) do
@@ -72,7 +73,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
       {:error, :missing_private_key} ->
         {:error, "PancakeSwap private key is not configured"}
       {:ok, %{"success" => false, "error" => error}} ->
-        {:error, "Failed to import required packages: #{error}"}
+        {:error, "Failed to import web3: #{error}"}
       {:error, reason} ->
         {:error, reason}
     end
@@ -106,7 +107,6 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
         try:
             from web3 import Web3
             from datetime import datetime, timedelta
-            import json
 
             w3 = Web3(Web3.HTTPProvider("https://bsc-dataseed.binance.org/"))
             account = w3.eth.account.from_key(private_key)
@@ -124,6 +124,11 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                         {"name": "amountBMin", "type": "uint256"},
                         {"name": "to", "type": "address"},
                         {"name": "deadline", "type": "uint256"}
+                    ],
+                    "outputs": [
+                        {"name": "amountA", "type": "uint256"},
+                        {"name": "amountB", "type": "uint256"},
+                        {"name": "liquidity", "type": "uint256"}
                     ]
                 },
                 {
@@ -137,6 +142,10 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                         {"name": "amountBMin", "type": "uint256"},
                         {"name": "to", "type": "address"},
                         {"name": "deadline", "type": "uint256"}
+                    ],
+                    "outputs": [
+                        {"name": "amountA", "type": "uint256"},
+                        {"name": "amountB", "type": "uint256"}
                     ]
                 }
             ]
@@ -157,6 +166,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                 {
                     "name": "getReserves",
                     "type": "function",
+                    "inputs": [],
                     "outputs": [
                         {"name": "_reserve0", "type": "uint112"},
                         {"name": "_reserve1", "type": "uint112"},
@@ -166,6 +176,28 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                 {
                     "name": "totalSupply",
                     "type": "function",
+                    "inputs": [],
+                    "outputs": [{"name": "", "type": "uint256"}]
+                }
+            ]
+
+            ERC20_ABI = [
+                {
+                    "name": "approve",
+                    "type": "function",
+                    "inputs": [
+                        {"name": "spender", "type": "address"},
+                        {"name": "amount", "type": "uint256"}
+                    ],
+                    "outputs": [{"name": "", "type": "bool"}]
+                },
+                {
+                    "name": "allowance",
+                    "type": "function",
+                    "inputs": [
+                        {"name": "owner", "type": "address"},
+                        {"name": "spender", "type": "address"}
+                    ],
                     "outputs": [{"name": "", "type": "uint256"}]
                 }
             ]
@@ -181,10 +213,38 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
 
             deadline = int((datetime.now() + timedelta(minutes=20)).timestamp())
             slippage_factor = 1 - (slippage / 10000)
+            router_checksum = Web3.to_checksum_address(router_address)
+
+            def approve_token(token_address, amount):
+                token = w3.eth.contract(
+                    address=Web3.to_checksum_address(token_address),
+                    abi=ERC20_ABI
+                )
+                allowance = token.functions.allowance(
+                    account.address, router_checksum
+                ).call()
+                if allowance < amount:
+                    approve_tx = token.functions.approve(
+                        router_checksum,
+                        2**256 - 1
+                    ).build_transaction({
+                        "from": account.address,
+                        "nonce": w3.eth.get_transaction_count(account.address),
+                        "gas": 100000,
+                        "gasPrice": w3.eth.gas_price
+                    })
+                    signed = account.sign_transaction(approve_tx)
+                    approve_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+                    w3.eth.wait_for_transaction_receipt(approve_hash)
 
             if action == "add_liquidity":
+                # Approve both tokens
+                approve_token(token_a, int(amount_a))
+                approve_token(token_b, int(amount_b))
+
                 amount_a_min = int(int(amount_a) * slippage_factor)
                 amount_b_min = int(int(amount_b) * slippage_factor)
+
                 tx = router.functions.addLiquidity(
                     Web3.to_checksum_address(token_a),
                     Web3.to_checksum_address(token_b),
@@ -202,18 +262,29 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                 })
                 signed = account.sign_transaction(tx)
                 tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
                 result = {
                     "tx_hash": tx_hash.hex(),
                     "lp_tokens": "0",
-                    "status": "success"
+                    "status": "success" if receipt.status == 1 else "failed"
                 }
 
             elif action == "remove_liquidity":
+                # Get pair address for LP token approval
+                pair_address = factory.functions.getPair(
+                    Web3.to_checksum_address(token_a),
+                    Web3.to_checksum_address(token_b)
+                ).call()
+
+                # Approve LP token
+                approve_token(pair_address, int(lp_amount))
+
                 tx = router.functions.removeLiquidity(
                     Web3.to_checksum_address(token_a),
                     Web3.to_checksum_address(token_b),
                     int(lp_amount),
-                    0, 0,
+                    0,
+                    0,
                     account.address,
                     deadline
                 ).build_transaction({
@@ -224,9 +295,10 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
                 })
                 signed = account.sign_transaction(tx)
                 tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+                receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
                 result = {
                     "tx_hash": tx_hash.hex(),
-                    "status": "success"
+                    "status": "success" if receipt.status == 1 else "failed"
                 }
 
             elif action == "get_pool_info":
