@@ -1,9 +1,6 @@
 defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
   @moduledoc """
-  A prism that executes token swaps on PancakeSwap V2.
-
-  Uses Router V2 swapExactTokensForTokens directly via web3.py.
-  Handles ERC20 token approval automatically before swap.
+  A prism that executes token swaps on PancakeSwap V2/V3.
 
   ## Example
 
@@ -11,29 +8,34 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
       ...>   token_in: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
       ...>   token_out: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56",
       ...>   amount_in: "1000000000000000000",
-      ...>   chain_id: 56
+      ...>   chain_id: 56,
+      ...>   slippage: 50
       ...> }, %{})
+
+  Reads config:
+  - :pancakeswap_private_key - wallet private key
+  - :bsc_rpc_url - BSC RPC endpoint
   """
 
   use Lux.Prism,
-    name: "PancakeSwap V2 Token Swap",
-    description: "Executes token swaps on PancakeSwap V2 with auto token approval",
+    name: "PancakeSwap Token Swap",
+    description: "Executes token swaps on PancakeSwap V2/V3 DEX",
     input_schema: %{
       type: :object,
       properties: %{
-        token_in: %{type: :string, description: "Input token address"},
-        token_out: %{type: :string, description: "Output token address"},
-        amount_in: %{type: :string, description: "Amount in wei"},
-        slippage: %{type: :integer, description: "Slippage in bps", default: 50},
-        chain_id: %{type: :integer, description: "Chain ID", default: 56}
+        token_in: %{type: :string, description: "Input token contract address"},
+        token_out: %{type: :string, description: "Output token contract address"},
+        amount_in: %{type: :string, description: "Amount to swap in wei"},
+        chain_id: %{type: :integer, description: "Chain ID (56=BSC Mainnet, 97=BSC Testnet)", default: 56},
+        slippage: %{type: :integer, description: "Slippage tolerance in basis points (50 = 0.5%)", default: 50}
       },
       required: ["token_in", "token_out", "amount_in"]
     },
     output_schema: %{
       type: :object,
       properties: %{
-        tx_hash: %{type: :string},
-        amount_out: %{type: :string},
+        tx_hash: %{type: :string, description: "Transaction hash"},
+        amount_out: %{type: :string, description: "Amount of tokens received"},
         status: %{type: :string}
       },
       required: ["tx_hash", "amount_out", "status"]
@@ -45,67 +47,23 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
 
   alias Lux.Config
 
-  @router_v2 "0x10ED43C718714eb63d5aA57B78B54704E256024E"
-  @bsc_rpc   "https://bsc-dataseed.binance.org/"
-
-  @router_abi [
-    %{
-      "name" => "swapExactTokensForTokens",
-      "type" => "function",
-      "inputs" => [
-        %{"name" => "amountIn", "type" => "uint256"},
-        %{"name" => "amountOutMin", "type" => "uint256"},
-        %{"name" => "path", "type" => "address[]"},
-        %{"name" => "to", "type" => "address"},
-        %{"name" => "deadline", "type" => "uint256"}
-      ],
-      "outputs" => [%{"name" => "amounts", "type" => "uint256[]"}]
-    },
-    %{
-      "name" => "getAmountsOut",
-      "type" => "function",
-      "inputs" => [
-        %{"name" => "amountIn", "type" => "uint256"},
-        %{"name" => "path", "type" => "address[]"}
-      ],
-      "outputs" => [%{"name" => "amounts", "type" => "uint256[]"}]
-    }
-  ]
-
-  @erc20_abi [
-    %{
-      "name" => "approve",
-      "type" => "function",
-      "inputs" => [
-        %{"name" => "spender", "type" => "address"},
-        %{"name" => "amount", "type" => "uint256"}
-      ],
-      "outputs" => [%{"name" => "", "type" => "bool"}]
-    },
-    %{
-      "name" => "allowance",
-      "type" => "function",
-      "inputs" => [
-        %{"name" => "owner", "type" => "address"},
-        %{"name" => "spender", "type" => "address"}
-      ],
-      "outputs" => [%{"name" => "", "type" => "uint256"}]
-    }
-  ]
-
   def handler(input, _ctx) do
     input = Map.put_new(input, :chain_id, 56)
     input = Map.put_new(input, :slippage, 50)
 
     with {:ok, private_key} <- get_private_key(),
+         {:ok, rpc_url} <- get_rpc_url(input.chain_id),
          {:ok, %{"success" => true}} <- Lux.Python.import_package("web3"),
-         {:ok, result} <- execute_swap(private_key, input) do
+         {:ok, %{"success" => true}} <- Lux.Python.import_package("pancakeswap_python"),
+         {:ok, result} <- execute_swap(private_key, rpc_url, input) do
       {:ok, result}
     else
       {:error, :missing_private_key} ->
-        {:error, "Private key not configured"}
+        {:error, "PancakeSwap private key is not configured"}
+      {:error, :missing_rpc_url} ->
+        {:error, "BSC RPC URL is not configured"}
       {:ok, %{"success" => false, "error" => error}} ->
-        {:error, "web3 import failed: #{error}"}
+        {:error, "Failed to import required packages: #{error}"}
       {:error, reason} ->
         {:error, reason}
     end
@@ -120,91 +78,50 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
     _ -> {:error, :missing_private_key}
   end
 
-  defp execute_swap(private_key, params) do
+  defp get_rpc_url(56), do: {:ok, "https://bsc-dataseed.binance.org/"}
+  defp get_rpc_url(97), do: {:ok, "https://data-seed-prebsc-1-s1.binance.org:8545/"}
+  defp get_rpc_url(_), do: {:error, :missing_rpc_url}
+
+  defp execute_swap(private_key, rpc_url, params) do
     python_result =
       python variables: %{
                private_key: private_key,
+               rpc_url: rpc_url,
                token_in: params.token_in,
                token_out: params.token_out,
                amount_in: params.amount_in,
-               slippage: params.slippage,
-               router_address: @router_v2,
-               rpc_url: @bsc_rpc,
-               router_abi: Jason.encode!(@router_abi),
-               erc20_abi: Jason.encode!(@erc20_abi)
+               slippage: params.slippage
              } do
         ~PY"""
         result = None
         try:
             from web3 import Web3
-            from datetime import datetime, timedelta
-            import json
+            from pancakeswap_python import PancakeSwap
 
             w3 = Web3(Web3.HTTPProvider(rpc_url))
             account = w3.eth.account.from_key(private_key)
-            router_abi = json.loads(router_abi)
-            erc20_abi = json.loads(erc20_abi)
 
-            router = w3.eth.contract(
-                address=Web3.to_checksum_address(router_address),
-                abi=router_abi
+            pancake = PancakeSwap(
+                address=account.address,
+                private_key=private_key,
+                web3=w3
             )
 
-            token_in_address = Web3.to_checksum_address(token_in)
-            token_out_address = Web3.to_checksum_address(token_out)
-            router_address_checksum = Web3.to_checksum_address(router_address)
+            slippage_pct = slippage / 10000
 
-            # Check and set token approval
-            token_contract = w3.eth.contract(
-                address=token_in_address,
-                abi=erc20_abi
+            tx_hash = pancake.make_trade(
+                input_token=token_in,
+                output_token=token_out,
+                qty=int(amount_in),
+                slippage=slippage_pct
             )
 
-            allowance = token_contract.functions.allowance(
-                account.address,
-                router_address_checksum
-            ).call()
-
-            if allowance < int(amount_in):
-                approve_tx = token_contract.functions.approve(
-                    router_address_checksum,
-                    2**256 - 1
-                ).build_transaction({
-                    "from": account.address,
-                    "nonce": w3.eth.get_transaction_count(account.address),
-                    "gas": 100000,
-                    "gasPrice": w3.eth.gas_price
-                })
-                signed_approve = account.sign_transaction(approve_tx)
-                approve_hash = w3.eth.send_raw_transaction(signed_approve.raw_transaction)
-                w3.eth.wait_for_transaction_receipt(approve_hash)
-
-            path = [token_in_address, token_out_address]
-            amounts_out = router.functions.getAmountsOut(int(amount_in), path).call()
-            amount_out_min = int(amounts_out[-1] * (1 - slippage / 10000))
-            deadline = int((datetime.now() + timedelta(minutes=20)).timestamp())
-
-            tx = router.functions.swapExactTokensForTokens(
-                int(amount_in),
-                amount_out_min,
-                path,
-                account.address,
-                deadline
-            ).build_transaction({
-                "from": account.address,
-                "nonce": w3.eth.get_transaction_count(account.address),
-                "gas": 250000,
-                "gasPrice": w3.eth.gas_price
-            })
-
-            signed = account.sign_transaction(tx)
-            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+            amount_out = pancake.get_token_price(token_in, token_out, int(amount_in))
 
             result = {
-                "tx_hash": tx_hash.hex(),
-                "amount_out": str(amounts_out[-1]),
-                "status": "success" if receipt.status == 1 else "failed"
+                "tx_hash": tx_hash.hex() if hasattr(tx_hash, 'hex') else str(tx_hash),
+                "amount_out": str(amount_out),
+                "status": "success"
             }
         except Exception as e:
             result = {"error": str(e)}
@@ -214,7 +131,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
 
     case python_result do
       %{"error" => error} -> {:error, error}
-      %{"status" => _} = res -> {:ok, res}
+      %{"tx_hash" => _, "amount_out" => _, "status" => _} = res -> {:ok, res}
     end
   end
 end
