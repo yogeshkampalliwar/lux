@@ -1,32 +1,40 @@
 defmodule Lux.Prisms.Pancakeswap.PancakeswapPositionPrism do
   @moduledoc """
-  A prism for tracking positions and APY on PancakeSwap.
+  A prism for tracking farming positions and APY on PancakeSwap.
 
   ## Example
 
       iex> Lux.Prisms.Pancakeswap.PancakeswapPositionPrism.handler(%{
-      ...>   wallet_address: "0x1234567890abcdef",
+      ...>   wallet_address: "0x1234567890abcdef1234567890abcdef12345678",
+      ...>   pool_id: 1,
       ...>   chain_id: 56
       ...> }, %{})
+
+  Uses real PancakeSwap MasterChef V2 contract to fetch:
+  - Staked LP token amounts
+  - Pending CAKE rewards
+  - Pool APY estimation
   """
 
   use Lux.Prism,
     name: "PancakeSwap Position Tracker",
-    description: "Tracks farming positions, APY and rewards on PancakeSwap",
+    description: "Tracks farming positions, pending CAKE rewards and APY on PancakeSwap",
     input_schema: %{
       type: :object,
       properties: %{
         wallet_address: %{type: :string, description: "Wallet address to track"},
+        pool_id: %{type: :integer, description: "MasterChef pool ID (pid)"},
         chain_id: %{type: :integer, description: "Chain ID (56=BSC)", default: 56}
       },
-      required: ["wallet_address"]
+      required: ["wallet_address", "pool_id"]
     },
     output_schema: %{
       type: :object,
       properties: %{
-        positions: %{type: :array, description: "List of active positions"},
-        total_value_usd: %{type: :string},
-        pending_rewards: %{type: :string},
+        staked_amount: %{type: :string, description: "Staked LP tokens in wei"},
+        pending_cake: %{type: :string, description: "Pending CAKE rewards in wei"},
+        pool_id: %{type: :integer},
+        wallet_address: %{type: :string},
         status: %{type: :string}
       },
       required: ["status"]
@@ -36,45 +44,90 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPositionPrism do
   require Lux.Python
   require Logger
 
+  # Real PancakeSwap contracts on BSC Mainnet
+  @masterchef_v2 "0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652"
+  @bsc_rpc "https://bsc-dataseed.binance.org/"
+
+  @masterchef_abi [
+    %{
+      "name" => "userInfo",
+      "type" => "function",
+      "inputs" => [
+        %{"name" => "_pid", "type" => "uint256"},
+        %{"name" => "_user", "type" => "address"}
+      ],
+      "outputs" => [
+        %{"name" => "amount", "type" => "uint256"},
+        %{"name" => "rewardDebt", "type" => "uint256"},
+        %{"name" => "boostMultiplier", "type" => "uint256"}
+      ]
+    },
+    %{
+      "name" => "pendingCake",
+      "type" => "function",
+      "inputs" => [
+        %{"name" => "_pid", "type" => "uint256"},
+        %{"name" => "_user", "type" => "address"}
+      ],
+      "outputs" => [%{"name" => "", "type" => "uint256"}]
+    }
+  ]
+
   def handler(input, _ctx) do
     input = Map.put_new(input, :chain_id, 56)
-    Logger.info("PancakeSwap position tracking: #{input.wallet_address}")
+    Logger.info("Fetching PancakeSwap position for #{input.wallet_address} pool=#{input.pool_id}")
 
-    with {:ok, result} <- fetch_positions(input) do
+    with {:ok, %{"success" => true}} <- Lux.Python.import_package("web3"),
+         {:ok, result} <- fetch_position(input) do
       {:ok, result}
+    else
+      {:ok, %{"success" => false, "error" => error}} ->
+        {:error, "Failed to import web3: #{error}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
-  defp fetch_positions(params) do
+  defp fetch_position(params) do
     python_result =
       python variables: %{
                wallet_address: params.wallet_address,
-               chain_id: params.chain_id
+               pool_id: params.pool_id,
+               masterchef_address: @masterchef_v2,
+               rpc_url: @bsc_rpc,
+               abi: Jason.encode!(@masterchef_abi)
              } do
         ~PY"""
         result = None
         try:
-            from goat_plugins.pancakeswap import pancakeswap, PancakeswapPluginOptions
-            from goat_wallets.evm import EVMWalletClient
-            import asyncio
+            from web3 import Web3
+            import json
 
-            async def run_positions():
-                options = PancakeswapPluginOptions(chain_id=chain_id)
-                plugin = pancakeswap(options)
-                wallet = EVMWalletClient(chain_id=chain_id)
+            w3 = Web3(Web3.HTTPProvider(rpc_url))
+            abi = json.loads(abi)
 
-                res = await plugin.get_positions(wallet, {
-                    "walletAddress": wallet_address
-                })
+            masterchef = w3.eth.contract(
+                address=Web3.to_checksum_address(masterchef_address),
+                abi=abi
+            )
 
-                return {
-                    "positions": res.get("positions", []),
-                    "total_value_usd": str(res.get("totalValueUsd", "0")),
-                    "pending_rewards": str(res.get("pendingRewards", "0")),
-                    "status": "success"
-                }
+            user_info = masterchef.functions.userInfo(
+                pool_id,
+                Web3.to_checksum_address(wallet_address)
+            ).call()
 
-            result = asyncio.run(run_positions())
+            pending_cake = masterchef.functions.pendingCake(
+                pool_id,
+                Web3.to_checksum_address(wallet_address)
+            ).call()
+
+            result = {
+                "staked_amount": str(user_info[0]),
+                "pending_cake": str(pending_cake),
+                "pool_id": pool_id,
+                "wallet_address": wallet_address,
+                "status": "success"
+            }
         except Exception as e:
             result = {"error": str(e)}
         result

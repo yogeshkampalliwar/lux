@@ -1,6 +1,6 @@
 defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrism do
   @moduledoc """
-  A prism for yield farming on PancakeSwap.
+  A prism for yield farming on PancakeSwap MasterChef V2.
 
   ## Example
 
@@ -10,11 +10,14 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrism do
       ...>   amount: "1000000000000000000",
       ...>   chain_id: 56
       ...> }, %{})
+
+  Reads config:
+  - :pancakeswap_private_key - wallet private key
   """
 
   use Lux.Prism,
     name: "PancakeSwap Yield Farming",
-    description: "Manages yield farming positions on PancakeSwap",
+    description: "Manages yield farming on PancakeSwap MasterChef V2",
     input_schema: %{
       type: :object,
       properties: %{
@@ -23,7 +26,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrism do
           description: "Action: deposit, withdraw, harvest",
           enum: ["deposit", "withdraw", "harvest"]
         },
-        pool_id: %{type: :integer, description: "Farm pool ID"},
+        pool_id: %{type: :integer, description: "MasterChef pool ID (pid)"},
         amount: %{type: :string, description: "Amount in wei (not needed for harvest)"},
         chain_id: %{type: :integer, description: "Chain ID (56=BSC)", default: 56}
       },
@@ -43,51 +46,131 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrism do
   require Lux.Python
   require Logger
 
+  alias Lux.Config
+
+  # PancakeSwap MasterChef V2 on BSC
+  @masterchef_v2 "0xa5f8C5Dbd5F286960b9d90548680aE5ebFf07652"
+
+  @masterchef_abi [
+    %{
+      "name" => "deposit",
+      "type" => "function",
+      "inputs" => [
+        %{"name" => "_pid", "type" => "uint256"},
+        %{"name" => "_amount", "type" => "uint256"}
+      ]
+    },
+    %{
+      "name" => "withdraw",
+      "type" => "function",
+      "inputs" => [
+        %{"name" => "_pid", "type" => "uint256"},
+        %{"name" => "_amount", "type" => "uint256"}
+      ]
+    },
+    %{
+      "name" => "pendingCake",
+      "type" => "function",
+      "inputs" => [
+        %{"name" => "_pid", "type" => "uint256"},
+        %{"name" => "_user", "type" => "address"}
+      ],
+      "outputs" => [%{"name" => "", "type" => "uint256"}]
+    }
+  ]
+
   def handler(input, _ctx) do
     input = Map.put_new(input, :chain_id, 56)
-    Logger.info("PancakeSwap farm action: #{input.action} pool_id=#{input.pool_id}")
 
-    with {:ok, result} <- execute_farm_action(input) do
+    with {:ok, private_key} <- get_private_key(),
+         {:ok, %{"success" => true}} <- Lux.Python.import_package("web3"),
+         {:ok, result} <- execute_farm_action(private_key, input) do
       {:ok, result}
+    else
+      {:error, :missing_private_key} ->
+        {:error, "PancakeSwap private key is not configured"}
+      {:ok, %{"success" => false, "error" => error}} ->
+        {:error, "Failed to import required packages: #{error}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
-  defp execute_farm_action(params) do
+  defp get_private_key do
+    case Config.pancakeswap_private_key() do
+      nil -> {:error, :missing_private_key}
+      key -> {:ok, key}
+    end
+  rescue
+    _ -> {:error, :missing_private_key}
+  end
+
+  defp execute_farm_action(private_key, params) do
     python_result =
       python variables: %{
+               private_key: private_key,
                action: params.action,
                pool_id: params.pool_id,
                amount: Map.get(params, :amount, "0"),
-               chain_id: params.chain_id
+               masterchef_address: @masterchef_v2,
+               abi: Jason.encode!(@masterchef_abi)
              } do
         ~PY"""
         result = None
         try:
-            from goat_plugins.pancakeswap import pancakeswap, PancakeswapPluginOptions
-            from goat_wallets.evm import EVMWalletClient
-            import asyncio
+            from web3 import Web3
+            import json
 
-            async def run_farm():
-                options = PancakeswapPluginOptions(chain_id=chain_id)
-                plugin = pancakeswap(options)
-                wallet = EVMWalletClient(chain_id=chain_id)
+            w3 = Web3(Web3.HTTPProvider("https://bsc-dataseed.binance.org/"))
+            account = w3.eth.account.from_key(private_key)
+            abi = json.loads(abi)
 
-                if action == "deposit":
-                    res = await plugin.farm_deposit(wallet, {"poolId": pool_id, "amount": amount})
-                elif action == "withdraw":
-                    res = await plugin.farm_withdraw(wallet, {"poolId": pool_id, "amount": amount})
-                elif action == "harvest":
-                    res = await plugin.farm_harvest(wallet, {"poolId": pool_id})
-                else:
-                    raise ValueError(f"Unknown action: {action}")
+            masterchef = w3.eth.contract(
+                address=Web3.to_checksum_address(masterchef_address),
+                abi=abi
+            )
 
-                return {
-                    "tx_hash": res.get("txHash", ""),
-                    "rewards_claimed": res.get("rewardsClaimed", "0"),
-                    "status": "success"
-                }
+            pending = masterchef.functions.pendingCake(
+                pool_id, account.address
+            ).call()
 
-            result = asyncio.run(run_farm())
+            if action == "deposit":
+                tx = masterchef.functions.deposit(
+                    pool_id, int(amount)
+                ).build_transaction({
+                    "from": account.address,
+                    "nonce": w3.eth.get_transaction_count(account.address),
+                    "gas": 300000,
+                    "gasPrice": w3.eth.gas_price
+                })
+            elif action == "withdraw":
+                tx = masterchef.functions.withdraw(
+                    pool_id, int(amount)
+                ).build_transaction({
+                    "from": account.address,
+                    "nonce": w3.eth.get_transaction_count(account.address),
+                    "gas": 300000,
+                    "gasPrice": w3.eth.gas_price
+                })
+            elif action == "harvest":
+                # deposit 0 to harvest
+                tx = masterchef.functions.deposit(
+                    pool_id, 0
+                ).build_transaction({
+                    "from": account.address,
+                    "nonce": w3.eth.get_transaction_count(account.address),
+                    "gas": 200000,
+                    "gasPrice": w3.eth.gas_price
+                })
+
+            signed = account.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+
+            result = {
+                "tx_hash": tx_hash.hex(),
+                "rewards_claimed": str(pending),
+                "status": "success"
+            }
         except Exception as e:
             result = {"error": str(e)}
         result
