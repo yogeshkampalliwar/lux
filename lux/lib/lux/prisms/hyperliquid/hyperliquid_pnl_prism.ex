@@ -86,7 +86,11 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrism do
             "entry_price": p.get("entryPx", "0"),
             "unrealized_pnl": str(unrealized),
             "return_on_equity": p.get("returnOnEquity", "0"),
-            "liquidation_price": p.get("liquidationPx", None)
+            "liquidation_price": p.get("liquidationPx"),
+            "leverage_type": p.get("leverage", {}).get("type", "cross"),
+            "leverage_value": str(p.get("leverage", {}).get("value", 1)),
+            "margin_used": p.get("marginUsed", "0"),
+            "position_value": p.get("positionValue", "0")
           })
 
         {

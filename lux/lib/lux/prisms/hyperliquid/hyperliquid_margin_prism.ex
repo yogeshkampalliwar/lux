@@ -67,7 +67,6 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidMarginPrism do
         address, info, exchange = setup(private_key, address, api_url, skip_ws=True)
         result = exchange.update_isolated_margin(
           params["amount"],
-          params["is_buy"],
           params["coin"]
         )
         result

@@ -102,12 +102,27 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrism do
 
           distance = abs(liq_price - current_price) / current_price
 
+          # Official Hyperliquid liquidation formula:
+          # liq_price = price - side * margin_available / position_size / (1 - l * side)
+          # maintenance margin = half of initial margin at max leverage (3-40x)
+          size = float(p.get("szi", "0"))
+          side = 1 if size > 0 else -1
+          margin_used = float(p.get("marginUsed", "0"))
+          maintenance_margin = margin_used * 0.5
+          account_value = float(margin.get("accountValue", "0"))
+          margin_available = account_value - maintenance_margin
+
           entry = {
             "coin": coin,
             "current_price": str(current_price),
             "liquidation_price": str(liq_price),
             "distance_pct": str(round(distance * 100, 2)),
-            "size": p.get("szi", "0")
+            "size": p.get("szi", "0"),
+            "side": "long" if side == 1 else "short",
+            "margin_used": p.get("marginUsed", "0"),
+            "maintenance_margin": str(maintenance_margin),
+            "leverage_type": p.get("leverage", {}).get("type", "cross"),
+            "leverage_value": str(p.get("leverage", {}).get("value", 1))
           }
 
           if distance < threshold:
