@@ -48,6 +48,41 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     }
 
   import Lux.Python
+
+  # Official SushiXSwap V2 addresses from github.com/sushiswap/sushixswap-v2
+  @sushixswap_v2 "0x804b526e5bf4349819fe2db65349d0825870f8ee"
+
+  # Stargate adapter addresses per chain (official deployments)
+  @stargate_adapters %{
+    1     => "0xD408a20f1213286fB3158a2bfBf5bFfAca8bF269",  # Ethereum
+    56    => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692",  # BSC
+    137   => "0x1719DEf1BF8422a777f2442bcE704AC4Fb20c7f0",  # Polygon
+    42161 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692",  # Arbitrum
+    10    => "0xA62eC622DbA415Aa94110739B1f951B1202Cf322",  # Optimism
+    8453  => "0xD408a20f1213286fB3158a2bfBf5bFfAca8bF269",  # Base
+    43114 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692"   # Avalanche
+  }
+
+  # Stargate chain IDs (different from EVM chain IDs)
+  @stargate_chain_ids %{
+    1     => 101,  # Ethereum
+    56    => 102,  # BSC
+    137   => 109,  # Polygon
+    42161 => 110,  # Arbitrum
+    10    => 111,  # Optimism
+    8453  => 184,  # Base
+    43114 => 106   # Avalanche
+  }
+
+  @rpcs %{
+    1     => "https://eth.llamarpc.com",
+    56    => "https://bsc-dataseed.binance.org/",
+    137   => "https://polygon-rpc.com",
+    42161 => "https://arb1.arbitrum.io/rpc",
+    10    => "https://mainnet.optimism.io",
+    8453  => "https://mainnet.base.org",
+    43114 => "https://api.avax.network/ext/bc/C/rpc"
+  }
   require Lux.Python
 
   @chain_names %{
