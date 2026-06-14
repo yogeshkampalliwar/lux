@@ -109,6 +109,8 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrism do
           side = 1 if size > 0 else -1
           margin_used = float(p.get("marginUsed", "0"))
           maintenance_margin = margin_used * 0.5
+          margin = user_state.get("crossMarginSummary", {})
+          margin = user_state.get("crossMarginSummary", {})
           account_value = float(margin.get("accountValue", "0"))
           margin_available = account_value - maintenance_margin
 
