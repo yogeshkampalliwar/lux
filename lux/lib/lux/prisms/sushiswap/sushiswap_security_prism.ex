@@ -87,9 +87,7 @@ defmodule Lux.Prisms.Sushiswap.SushiswapSecurityPrism do
       {:ok, %{is_safe: false, honeypot: false, sandwich_risk: "critical",
               score: 0, warnings: ["Token is blacklisted"]}}
     else
-      with {:ok, result} <- run_security_checks(token, rpc_url, router, amount) do
-        {:ok, result}
-      end
+      run_security_checks(token, rpc_url, router, amount)
     end
   end
 

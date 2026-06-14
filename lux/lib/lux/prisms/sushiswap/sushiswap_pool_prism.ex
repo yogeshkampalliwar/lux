@@ -54,21 +54,21 @@ defmodule Lux.Prisms.Sushiswap.SushiswapPoolPrism do
     1     => "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
     56    => "0xc35DADB65012eC5796536bD9864eD8773aBc74C4",
     137   => "0xc35DADB65012eC5796536bD9864eD8773aBc74C4",
-    42161 => "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"
+    42_161 => "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"
   }
 
   @routers %{
     1     => "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9f",
     56    => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
     137   => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
-    42161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
+    42_161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
   }
 
   @rpcs %{
     1   => "https://eth.llamarpc.com",
     56  => "https://bsc-dataseed.binance.org/",
     137 => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc"
+    42_161 => "https://arb1.arbitrum.io/rpc"
   }
 
   def handler(input, _ctx) do
@@ -328,5 +328,14 @@ defmodule Lux.Prisms.Sushiswap.SushiswapPoolPrism do
       %{"status" => "success"} = r -> {:ok, r}
       _ -> {:error, "Unexpected response"}
     end
+  end
+
+  defp extract_action_params(input) do
+    %{
+      slippage: input[:slippage] || input["slippage"] || 50,
+      amount_a: input[:amount_a] || input["amount_a"] || "0",
+      amount_b: input[:amount_b] || input["amount_b"] || "0",
+      liquidity: input[:liquidity] || input["liquidity"] || "0"
+    }
   end
 end

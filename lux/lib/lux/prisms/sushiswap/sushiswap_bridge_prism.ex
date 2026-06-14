@@ -57,10 +57,10 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     1     => "0xD408a20f1213286fB3158a2bfBf5bFfAca8bF269",  # Ethereum
     56    => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692",  # BSC
     137   => "0x1719DEf1BF8422a777f2442bcE704AC4Fb20c7f0",  # Polygon
-    42161 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692",  # Arbitrum
+    42_161 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692",  # Arbitrum
     10    => "0xA62eC622DbA415Aa94110739B1f951B1202Cf322",  # Optimism
     8453  => "0xD408a20f1213286fB3158a2bfBf5bFfAca8bF269",  # Base
-    43114 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692"   # Avalanche
+    43_114 => "0xFF51a7C624Eb866917102707F3dA8bFb99Db8692"   # Avalanche
   }
 
   # Stargate chain IDs (different from EVM chain IDs)
@@ -68,20 +68,20 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     1     => 101,  # Ethereum
     56    => 102,  # BSC
     137   => 109,  # Polygon
-    42161 => 110,  # Arbitrum
+    42_161 => 110,  # Arbitrum
     10    => 111,  # Optimism
     8453  => 184,  # Base
-    43114 => 106   # Avalanche
+    43_114 => 106   # Avalanche
   }
 
   @rpcs %{
     1     => "https://eth.llamarpc.com",
     56    => "https://bsc-dataseed.binance.org/",
     137   => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc",
+    42_161 => "https://arb1.arbitrum.io/rpc",
     10    => "https://mainnet.optimism.io",
     8453  => "https://mainnet.base.org",
-    43114 => "https://api.avax.network/ext/bc/C/rpc"
+    43_114 => "https://api.avax.network/ext/bc/C/rpc"
   }
   require Lux.Python
 
@@ -92,7 +92,7 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     42_161 => "Arbitrum",
     10    => "Optimism",
     8453  => "Base",
-    43114 => "Avalanche"
+    43_114 => "Avalanche"
   }
 
   # Stargate bridge contracts (used by SushiXSwap)
@@ -104,23 +104,29 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
   }
 
   def handler(input, _ctx) do
-    src_chain_id = input[:src_chain_id] || input["src_chain_id"]
-    dst_chain_id = input[:dst_chain_id] || input["dst_chain_id"]
+    execute_bridge_action(build_params(input))
+  end
 
-    params = %{
-      action: input[:action] || input["action"],
+  defp build_params(input) do
+    src_chain_id = get_field(input, :src_chain_id)
+    dst_chain_id = get_field(input, :dst_chain_id)
+
+    %{
+      action: get_field(input, :action),
       rpc_url: @rpcs[src_chain_id] || @rpcs[56],
       src_router: @stargate_routers[src_chain_id],
       src_chain_id: src_chain_id,
       dst_chain_id: dst_chain_id,
-      token: input[:token] || input["token"] || "USDC",
-      amount: input[:amount] || input["amount"] || "0",
-      tx_hash: input[:tx_hash] || input["tx_hash"],
+      token: get_field(input, :token) || "USDC",
+      amount: get_field(input, :amount) || "0",
+      tx_hash: get_field(input, :tx_hash),
       src_name: @chain_names[src_chain_id] || "Unknown",
       dst_name: @chain_names[dst_chain_id] || "Unknown"
     }
+  end
 
-    execute_bridge_action(params)
+  defp get_field(input, key) do
+    input[key] || input[Atom.to_string(key)]
   end
 
   defp execute_bridge_action(params) do
@@ -147,18 +153,18 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
           1:     101,
           56:    102,
           137:   109,
-          42161: 110,
+          42_161: 110,
           10:    111,
-          43114: 106
+          43_114: 106
         }
 
         # Average bridge times (minutes)
         BRIDGE_TIMES = {
           (1, 56):     "10-20 min",
           (1, 137):    "10-20 min",
-          (1, 42161):  "10-20 min",
+          (1, 42_161):  "10-20 min",
           (56, 137):   "10-15 min",
-          (56, 42161): "10-15 min",
+          (56, 42_161): "10-15 min",
           (137, 56):   "10-15 min",
         }
 
