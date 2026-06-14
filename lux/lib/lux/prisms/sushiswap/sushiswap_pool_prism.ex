@@ -83,7 +83,7 @@ defmodule Lux.Prisms.Sushiswap.SushiswapPoolPrism do
     with {:ok, private_key} <- get_private_key(),
          {:ok, result} <- execute_action(
            action, private_key, rpc_url,
-           factory, router, token_a, token_b, input
+           %{factory: factory, router: router, token_a: token_a, token_b: token_b, input: input}
          ) do
       {:ok, result}
     else
@@ -101,7 +101,9 @@ defmodule Lux.Prisms.Sushiswap.SushiswapPoolPrism do
     _ -> {:error, :missing_key}
   end
 
-  defp execute_action(action, private_key, rpc_url, factory, router, token_a, token_b, input) do
+  defp execute_action(action, private_key, rpc_url, ctx) do
+    %{factory: factory, router: router, token_a: token_a, token_b: token_b, input: input} = ctx
+
     slippage  = input[:slippage]  || input["slippage"]  || 50
     amount_a  = input[:amount_a]  || input["amount_a"]  || "0"
     amount_b  = input[:amount_b]  || input["amount_b"]  || "0"

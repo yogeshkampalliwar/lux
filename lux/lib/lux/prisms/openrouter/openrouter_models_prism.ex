@@ -72,29 +72,32 @@ defmodule Lux.Prisms.OpenRouter.OpenRouterModelsPrism do
     ) do
       {:ok, %{status: 200, body: body}} ->
         models = body["data"] || []
-        filtered = if filter do
-          Enum.filter(models, fn m ->
-            String.contains?(
-              String.downcase(m["id"] || ""),
-              String.downcase(filter)
-            )
-          end)
-        else
-          models
-        end
-        result = Enum.map(filtered, fn m ->
-          %{
-            id:              m["id"],
-            name:            m["name"],
-            context_length:  m["context_length"],
-            pricing:         m["pricing"]
-          }
-        end)
+        filtered = filter_models(models, filter)
+        result = Enum.map(filtered, &format_model/1)
         {:ok, result}
       {:ok, %{status: status, body: body}} ->
         {:error, "OpenRouter error #{status}: #{inspect(body)}"}
       {:error, reason} ->
         {:error, "HTTP error: #{inspect(reason)}"}
     end
+  end
+
+  defp filter_models(models, nil), do: models
+
+  defp filter_models(models, filter) do
+    needle = String.downcase(filter)
+
+    Enum.filter(models, fn m ->
+      String.contains?(String.downcase(m["id"] || ""), needle)
+    end)
+  end
+
+  defp format_model(m) do
+    %{
+      id: m["id"],
+      name: m["name"],
+      context_length: m["context_length"],
+      pricing: m["pricing"]
+    }
   end
 end

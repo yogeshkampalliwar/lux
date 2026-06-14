@@ -89,16 +89,10 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     1     => "Ethereum",
     56    => "BSC",
     137   => "Polygon",
-    42161 => "Arbitrum",
+    42_161 => "Arbitrum",
     10    => "Optimism",
+    8453  => "Base",
     43114 => "Avalanche"
-  }
-
-  @rpcs %{
-    1     => "https://eth.llamarpc.com",
-    56    => "https://bsc-dataseed.binance.org/",
-    137   => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc"
   }
 
   # Stargate bridge contracts (used by SushiXSwap)
@@ -106,46 +100,42 @@ defmodule Lux.Prisms.Sushiswap.SushiswapBridgePrism do
     1     => "0x8731d54E9D02c286767d56ac03e8037C07e01e98",
     56    => "0x4a364f8c717cAAD9A442737Eb7b8A55cc6cf18D8",
     137   => "0x45A01E4e04F14f7A4a6702c74187c5F6222033cd",
-    42161 => "0x53Bf833A5d6c4ddA888F69c22C88C9f356a41614"
+    42_161 => "0x53Bf833A5d6c4ddA888F69c22C88C9f356a41614"
   }
 
   def handler(input, _ctx) do
-    action       = input[:action]       || input["action"]
     src_chain_id = input[:src_chain_id] || input["src_chain_id"]
     dst_chain_id = input[:dst_chain_id] || input["dst_chain_id"]
-    token        = input[:token]        || input["token"] || "USDC"
-    amount       = input[:amount]       || input["amount"] || "0"
-    tx_hash      = input[:tx_hash]      || input["tx_hash"]
-    rpc_url      = @rpcs[src_chain_id]  || @rpcs[56]
-    src_router   = @stargate_routers[src_chain_id]
-    src_name     = @chain_names[src_chain_id] || "Unknown"
-    dst_name     = @chain_names[dst_chain_id] || "Unknown"
 
-    with {:ok, result} <- execute_bridge_action(
-           action, rpc_url, src_router,
-           src_chain_id, dst_chain_id,
-           token, amount, tx_hash,
-           src_name, dst_name
-         ) do
-      {:ok, result}
-    else
-      {:error, reason} -> {:error, reason}
-    end
+    params = %{
+      action: input[:action] || input["action"],
+      rpc_url: @rpcs[src_chain_id] || @rpcs[56],
+      src_router: @stargate_routers[src_chain_id],
+      src_chain_id: src_chain_id,
+      dst_chain_id: dst_chain_id,
+      token: input[:token] || input["token"] || "USDC",
+      amount: input[:amount] || input["amount"] || "0",
+      tx_hash: input[:tx_hash] || input["tx_hash"],
+      src_name: @chain_names[src_chain_id] || "Unknown",
+      dst_name: @chain_names[dst_chain_id] || "Unknown"
+    }
+
+    execute_bridge_action(params)
   end
 
-  defp execute_bridge_action(action, rpc_url, src_router, src_chain_id, dst_chain_id, token, amount, tx_hash, src_name, dst_name) do
+  defp execute_bridge_action(params) do
     result =
       python variables: %{
-        action:       action,
-        rpc_url:      rpc_url,
-        src_router:   src_router,
-        src_chain_id: src_chain_id,
-        dst_chain_id: dst_chain_id,
-        token:        token,
-        amount:       amount,
-        tx_hash:      tx_hash,
-        src_name:     src_name,
-        dst_name:     dst_name
+        action:       params.action,
+        rpc_url:      params.rpc_url,
+        src_router:   params.src_router,
+        src_chain_id: params.src_chain_id,
+        dst_chain_id: params.dst_chain_id,
+        token:        params.token,
+        amount:       params.amount,
+        tx_hash:      params.tx_hash,
+        src_name:     params.src_name,
+        dst_name:     params.dst_name
       } do
         ~PY"""
         from web3 import Web3

@@ -53,14 +53,14 @@ defmodule Lux.Prisms.Sushiswap.SushiswapLiquidityPrism do
     1     => "https://eth.llamarpc.com",
     56    => "https://bsc-dataseed.binance.org/",
     137   => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc"
+    42_161 => "https://arb1.arbitrum.io/rpc"
   }
 
   def handler(input, _ctx) do
-    chain_id    = input[:chain_id]    || input["chain_id"] || 56
-    address     = input[:address]     || input["address"]
-    pair_address= input[:pair_address]|| input["pair_address"]
-    rpc_url     = @rpcs[chain_id]     || @rpcs[56]
+    chain_id = input[:chain_id] || input["chain_id"] || 56
+    address = input[:address] || input["address"]
+    pair_address = input[:pair_address] || input["pair_address"]
+    rpc_url = @rpcs[chain_id] || @rpcs[56]
 
     result =
       python variables: %{
