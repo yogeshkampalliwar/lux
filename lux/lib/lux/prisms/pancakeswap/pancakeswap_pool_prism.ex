@@ -79,10 +79,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapPoolPrism do
   end
 
   defp get_private_key do
-    case Config.pancakeswap_private_key() do
-      nil -> {:error, :missing_private_key}
-      key -> {:ok, key}
-    end
+    {:ok, Config.pancakeswap_private_key()}
   rescue
     _ -> {:error, :missing_private_key}
   end
