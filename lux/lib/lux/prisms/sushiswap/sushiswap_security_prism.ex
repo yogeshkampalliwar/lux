@@ -61,14 +61,14 @@ defmodule Lux.Prisms.Sushiswap.SushiswapSecurityPrism do
     1     => "https://eth.llamarpc.com",
     56    => "https://bsc-dataseed.binance.org/",
     137   => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc"
+    42_161 => "https://arb1.arbitrum.io/rpc"
   }
 
   @routers %{
     1     => "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9f",
     56    => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
     137   => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
-    42161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
+    42_161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
   }
 
   # Known malicious contracts blacklist

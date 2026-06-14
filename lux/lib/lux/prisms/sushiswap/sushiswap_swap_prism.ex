@@ -72,16 +72,16 @@ defmodule Lux.Prisms.Sushiswap.SushiswapSwapPrism do
     1     => "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9f",
     56    => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
     137   => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
-    42161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
-    43114 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
+    42_161 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",
+    43_114 => "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"
   }
 
   @rpcs %{
     1     => "https://eth.llamarpc.com",
     56    => "https://bsc-dataseed.binance.org/",
     137   => "https://polygon-rpc.com",
-    42161 => "https://arb1.arbitrum.io/rpc",
-    43114 => "https://api.avax.network/ext/bc/C/rpc"
+    42_161 => "https://arb1.arbitrum.io/rpc",
+    43_114 => "https://api.avax.network/ext/bc/C/rpc"
   }
 
   def handler(input, _ctx) do
