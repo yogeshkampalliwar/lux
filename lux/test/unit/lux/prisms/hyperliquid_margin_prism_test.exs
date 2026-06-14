@@ -5,7 +5,7 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidMarginPrismTest do
 
   describe "handler/2" do
     test "adds margin successfully" do
-      with_mock Lux.Python, [run_python: fn _, _ ->
+      with_mock Lux.Python, [eval!: fn _, _ ->
         {:ok, %{"status" => "ok"}}
       end] do
         {:ok, result} = HyperliquidMarginPrism.run(%{coin: "ETH", amount: 100.0})
@@ -15,7 +15,7 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidMarginPrismTest do
     end
 
     test "removes margin successfully" do
-      with_mock Lux.Python, [run_python: fn _, _ ->
+      with_mock Lux.Python, [eval!: fn _, _ ->
         {:ok, %{"status" => "ok"}}
       end] do
         {:ok, result} = HyperliquidMarginPrism.run(%{coin: "ETH", amount: -50.0})
