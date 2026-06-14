@@ -7,10 +7,14 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidPnlPrismTest do
 
   describe "handler/2" do
     test "fetches pnl data successfully" do
-        "total_unrealized_pnl" => "100.0",
-        "total_realized_pnl" => "0",
-        "positions" => []
-      } end] do
+      with_mock Lux.Python, [run_python: fn _, _ ->
+        {:ok, %{
+          "total_unrealized_pnl" => "100.0",
+          "total_realized_pnl" => "0",
+          "positions" => [],
+          "recent_fills" => []
+        }}
+      end] do
         {:ok, result} = HyperliquidPnlPrism.run(%{address: @test_address})
         assert result.status == "success"
         assert is_map(result.pnl_data)
