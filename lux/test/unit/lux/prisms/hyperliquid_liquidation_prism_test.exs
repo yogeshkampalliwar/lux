@@ -7,11 +7,14 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrismTest do
 
   describe "handler/2" do
     test "returns at risk and safe positions" do
-        "at_risk_positions" => [%{"coin" => "ETH", "distance_pct" => "5.0"}],
-        "safe_positions" => [%{"coin" => "BTC", "distance_pct" => "25.0"}],
-        "account_value" => "10000.0",
-        "margin_usage" => "1000.0"
-      } end] do
+      with_mock Lux.Python, [run_python: fn _, _ ->
+        {:ok, %{
+          "at_risk_positions" => [%{"coin" => "ETH", "distance_pct" => "5.0"}],
+          "safe_positions" => [%{"coin" => "BTC", "distance_pct" => "25.0"}],
+          "account_value" => "10000.0",
+          "margin_usage" => "1000.0"
+        }}
+      end] do
         {:ok, result} = HyperliquidLiquidationPrism.run(%{address: @test_address})
         assert result.status == "success"
         assert is_list(result.at_risk_positions)
@@ -20,11 +23,14 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrismTest do
     end
 
     test "uses custom risk threshold" do
-        "at_risk_positions" => [],
-        "safe_positions" => [],
-        "account_value" => "10000.0",
-        "margin_usage" => "0"
-      } end] do
+      with_mock Lux.Python, [run_python: fn _, _ ->
+        {:ok, %{
+          "at_risk_positions" => [],
+          "safe_positions" => [],
+          "account_value" => "10000.0",
+          "margin_usage" => "0"
+        }}
+      end] do
         {:ok, result} = HyperliquidLiquidationPrism.run(%{
           address: @test_address,
           risk_threshold: 0.05

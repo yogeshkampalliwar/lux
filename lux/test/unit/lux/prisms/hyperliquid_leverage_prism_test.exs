@@ -5,6 +5,9 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLeveragePrismTest do
 
   describe "handler/2" do
     test "sets leverage successfully" do
+      with_mock Lux.Python, [run_python: fn _, _ ->
+        {:ok, %{"status" => "ok"}}
+      end] do
         {:ok, result} = HyperliquidLeveragePrism.run(%{coin: "ETH", leverage: 5, is_cross: true})
         assert result.status == "success"
       end
