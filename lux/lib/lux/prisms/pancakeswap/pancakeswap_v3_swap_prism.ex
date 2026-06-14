@@ -37,7 +37,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapV3SwapPrism do
         fee: %{
           type: :integer,
           description: "Pool fee tier: 100, 500, 2500, 10000",
-          enum: [100, 500, 2500, 10000],
+          enum: [100, 500, 2500, 10_000],
           default: 500
         },
         slippage: %{type: :integer, description: "Slippage in basis points", default: 50},

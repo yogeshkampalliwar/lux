@@ -103,11 +103,8 @@ defmodule Lux.Prisms.Sushiswap.SushiswapPoolPrism do
 
   defp execute_action(action, private_key, rpc_url, ctx) do
     %{factory: factory, router: router, token_a: token_a, token_b: token_b, input: input} = ctx
-
-    slippage  = input[:slippage]  || input["slippage"]  || 50
-    amount_a  = input[:amount_a]  || input["amount_a"]  || "0"
-    amount_b  = input[:amount_b]  || input["amount_b"]  || "0"
-    liquidity = input[:liquidity] || input["liquidity"] || "0"
+    %{slippage: slippage, amount_a: amount_a, amount_b: amount_b, liquidity: liquidity} =
+      extract_action_params(input)
 
     result =
       python variables: %{
