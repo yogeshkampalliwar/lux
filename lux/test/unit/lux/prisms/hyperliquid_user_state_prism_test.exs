@@ -9,7 +9,7 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidUserStatePrismTest do
 
   describe "handler/2" do
     test "fetches user state successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "assetPositions" => [],
         "crossMarginSummary" => %{"accountValue" => "10000.0"}
       } end] do

@@ -5,7 +5,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrismTest do
 
   describe "handler/2" do
     test "executes swap successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "tx_hash" => "0xabc123",
         "amount_out" => "100.0",
         "status" => "success"

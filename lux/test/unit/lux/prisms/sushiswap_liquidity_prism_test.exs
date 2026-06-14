@@ -5,7 +5,7 @@ defmodule Lux.Prisms.Sushiswap.SushiswapLiquidityPrismTest do
 
   describe "handler/2" do
     test "adds liquidity successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "tx_hash" => "0xabc123",
         "status" => "success",
         "lp_tokens" => "10.5"
@@ -22,7 +22,7 @@ defmodule Lux.Prisms.Sushiswap.SushiswapLiquidityPrismTest do
     end
 
     test "removes liquidity successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "tx_hash" => "0xdef456",
         "status" => "success",
         "amount_a" => "95.0",

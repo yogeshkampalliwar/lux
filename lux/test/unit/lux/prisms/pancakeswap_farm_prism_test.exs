@@ -5,7 +5,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrismTest do
 
   describe "handler/2" do
     test "stakes in farm successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "tx_hash" => "0xabc123",
         "status" => "success",
         "staked_amount" => "100.0",
@@ -21,7 +21,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapFarmPrismTest do
     end
 
     test "harvests rewards successfully" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "tx_hash" => "0xdef456",
         "status" => "success",
         "reward_amount" => "5.0"

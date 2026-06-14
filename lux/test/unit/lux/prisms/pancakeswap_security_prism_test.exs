@@ -16,7 +16,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSecurityPrismTest do
     end
 
     test "checks valid token" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "is_safe" => true,
         "honeypot" => false,
         "sell_tax" => 0.25,
@@ -36,7 +36,7 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSecurityPrismTest do
     end
 
     test "detects honeypot token" do
-      with_mock Lux.Python, [run_python!: fn _, _ -> %{
+      with_mock Lux.Python, [eval!: fn _, _ -> %{
         "is_safe" => false,
         "honeypot" => true,
         "sell_tax" => 99.0,
