@@ -60,10 +60,11 @@ defmodule Lux.Prisms.Pancakeswap.PancakeswapSwapPrism do
     input = Map.put_new(input, :chain_id, 56)
     input = Map.put_new(input, :slippage, 50)
 
+    router_addr = if input.chain_id == 97, do: @router_v2_testnet, else: @router_v2_mainnet
+
     with {:ok, private_key} <- get_private_key(),
          {:ok, rpc_url} <- get_rpc_url(input.chain_id),
          {:ok, %{"success" => true}} <- Lux.Python.import_package("web3"),
-         router_addr = if input.chain_id == 97, do: @router_v2_testnet, else: @router_v2_mainnet,
          {:ok, result} <- execute_swap(private_key, rpc_url, router_addr, input) do
       {:ok, result}
     else
