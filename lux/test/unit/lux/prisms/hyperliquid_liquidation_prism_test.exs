@@ -7,7 +7,7 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrismTest do
 
   describe "handler/2" do
     test "returns at risk and safe positions" do
-      with_mock Lux.Python, [run_python: fn _, _ ->
+      with_mock Lux.Python, [eval!: fn _, _ ->
         {:ok, %{
           "at_risk_positions" => [%{"coin" => "ETH", "distance_pct" => "5.0"}],
           "safe_positions" => [%{"coin" => "BTC", "distance_pct" => "25.0"}],
@@ -23,7 +23,7 @@ defmodule Lux.Prisms.Hyperliquid.HyperliquidLiquidationPrismTest do
     end
 
     test "uses custom risk threshold" do
-      with_mock Lux.Python, [run_python: fn _, _ ->
+      with_mock Lux.Python, [eval!: fn _, _ ->
         {:ok, %{
           "at_risk_positions" => [],
           "safe_positions" => [],
